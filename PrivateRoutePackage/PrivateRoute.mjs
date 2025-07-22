@@ -4,33 +4,20 @@ import ProductSubmissionCheck from "../utils/ProductSubmisionCheck.mjs";
 import express from 'express';
 import dotenv from 'dotenv';
 dotenv.config();
-import { MongoClient, ObjectId, ServerApiVersion, Timestamp } from 'mongodb';
+import {  ObjectId } from 'mongodb';
+import mongo from "../MongoDB.mjs";
 const router = express.Router();
 
-const uri = process.env.MONGODB_URI;
-
-const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  },
-});
 
 let db;
 (async () => {
   try {
-    /* await client.connect(); */
-    db = client.db('assignment-12');
-    // Ensure the collection is created
-    // Optional: Create index
-    // await db.collection('users').createIndex({ email: 1 }, { unique: true });
-    console.log("✅ MongoDB connected");
+
+    db = await mongo()
   } catch (err) {
     console.error('❌ MongoDB connection error:', err);
   }
 })();
-
 
 //middleware to protect routes
 router.use(verifyJWT);
@@ -174,33 +161,168 @@ router.get('/single-product/:id', async (req, res) => {
 
 
 
-router.post('/request-volunteer', async (req, res) => {
-  const requestData = req.body;
-
+router.patch('/product/upvot/:id', verifyJWT, async (req, res) => {
   try {
-    const result = await db.collection("volunteer_requests").insertOne(requestData);
-    
-    if (!result.acknowledged) {
-      return res.status(400).json({ message: 'Failed to insert volunteer request' });
+    const productId = req.params.id;
+    const userEmail = req.user.email;
+
+/*     await db.collection('products').updateMany(
+  { upvot: { $not: { $type: 'array' } } },
+  { $set: { upvot: [] } }
+); */
+
+    const product = await db.collection('products').findOne({ _id: new ObjectId(productId) });
+
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
     }
 
-    // Decrease volunteersNeeded by 1
-    await db.collection("volunteer").updateOne(
-      { _id: new ObjectId(requestData.postId) },
-      { $inc: { volunteersNeeded: -1 } }
+    // ✅ Prevent owner from voting
+    if (product.owner_mail === userEmail) {
+      return res.status(403).json({ error: 'Owners cannot upvote their own product' });
+    }
+
+    // ✅ Prevent duplicate votes
+    const alreadyVoted = product.upvot?.includes(userEmail);
+    if (alreadyVoted) {
+      return res.status(409).json({ error: 'You have already upvoted this product' });
+    } 
+
+    // ✅ Update upvote list
+    const result = await db.collection('products').updateOne(
+      { _id: new ObjectId(productId) },
+      { $addToSet: { upvot: userEmail } } // avoids duplicates
     );
 
-    res.status(201).json({ message: "Volunteer request submitted" });
+    res.status(200).json({ message: 'Product upvoted successfully', result });
   } catch (err) {
-    if (err.code === 11000) {
-      // Duplicate key error (unique index violation)
-      return res.status(409).json({ message: "You have already requested for this post" });
-    }
-
-    console.error(err);
-    res.status(500).json({ message: "Something went wrong" });
+    console.error('Error upvoting product:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+
+// Report a product (prevent owner from reporting)
+router.post('/product/:id/report', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const email  = req.user.email;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    const reportcheck=await db.collection('report').findOne({report_id:id.toString()})
+    const product = await db.collection('products').findOne({ _id: new ObjectId(id) });
+
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    // Prevent owner from reporting
+    if (product.owner_mail === email) {
+      return res.status(403).json({ error: 'Owners cannot report their own product' });
+    }
+     if(!reportcheck){
+         const result = await db.collection('report').insertOne({
+          report_id: id.toString(),
+          reports:[email],
+          action:'pending'  
+        }
+       );
+
+        return res.status(200).json({ message: 'Product reported successfully', result });   
+     }
+    // Add reports array if missing
+    if (!Array.isArray(reportcheck.reports)) {
+        reportcheck.reports = [];
+    }
+
+    // Prevent duplicate reports
+    if (reportcheck.reports.includes(email)) {
+      return res.status(409).json({ error: 'You have already reported this product' });
+    }
+
+    // Add user email to the reports array
+    const result = await db.collection('report').updateOne(
+      { report_id: id.toString() },
+      { $addToSet: { reports: email } }
+    );
+
+    res.status(200).json({ message: 'Product reported successfully', result });
+
+  } catch (error) {
+    console.error('Error reporting product:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+// POST /review - add review
+router.post('/review', async (req, res) => {
+  try {
+    const {
+      productId,
+      reviewerName,
+      reviewerImage,
+      reviewText,
+      rating
+    } = req.body;
+
+    const reviewerEmail = req.user?.email || req.body.reviewerEmail; // assuming auth middleware or sent manually
+    if (!reviewerEmail || !productId || !reviewText || !rating) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Find the product
+    const product = await db.collection('products').findOne({ _id: new ObjectId(productId) });
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    // ❌ Block if the reviewer is the owner
+    if (product.owner_mail === reviewerEmail) {
+      return res.status(403).json({ error: 'Owners cannot review their own product' });
+    }
+
+    // ✅ Insert review
+    const reviewDoc = {
+      productId:productId.toString(),
+      reviewerName,
+      reviewerImage,
+      reviewerEmail,
+      reviewText,
+      rating,
+      createdAt: new Date()
+    };
+    const result = await db.collection('reviews').insertOne(reviewDoc);
+    res.status(201).json({ message: 'Review submitted', insertedId: result.insertedId });
+
+  } catch (error) {
+    console.error('Review submission failed:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Fetch reviews by productId
+
+router.get("/reviews/:id", async (req, res) => {
+  try {
+    const productId = req.params.id;
+
+    // Fetch reviews by productId
+    const reviews =await db.collection('reviews')
+      .find({ productId: productId.toString() })
+      .sort({ createdAt: -1 }) // newest first
+      .toArray();
+
+    res.send(reviews);
+  } catch (error) {
+    console.error("Failed to fetch reviews:", error);
+    res.status(500).send({ error: "Failed to fetch reviews" });
+  }
+});
+
+
 
 
 //all profile activities
@@ -216,15 +338,6 @@ router.get('/myproducts/:owner_mail', async (req, res) => {
   }
 });
 
-// Get all volunteer request posts by logged-in user
-router.get('/my-request-posts/:email', async (req, res) => {
-  try {
-    const requests = await db.collection('volunteer_requests').find({ volunteerEmail: req.params.email }).toArray();
-    res.json(requests);
-  } catch (err) {
-    res.status(500).json({ message: 'Failed to fetch requests' });
-  }
-});
 
 // Update a product
  router.patch('/update-product/:id', async (req, res) => { 
@@ -278,36 +391,6 @@ router.delete('/delete-product/:id', async (req, res) => {
   }
 });
 
-// Cancel a volunteer request
-router.delete('/cancel-volunteer-request/:id', async (req, res) => {
-  try {
-    const id = await db.collection('volunteer_requests').findOne({
-      _id: new ObjectId(req.params.id),
-      volunteerEmail: req.user.email
-    });
-    console.log(id);
-    const deleted = await db.collection('volunteer_requests').findOneAndDelete({
-      _id: new ObjectId(req.params.id),
-      volunteerEmail: req.user.email
-    });
-
-
-
-   await db.collection("volunteer").updateOne(
-      { _id: new ObjectId(id.postId) },
-      { $inc: { volunteersNeeded: +1 } }
-    );
-
-    if (!deleted) {
-      return res.status(403).json({ message: 'Unauthorized or request not found' });
-    }
-
-    res.json({ message: 'Request cancelled successfully' });
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: 'Failed to cancel request' });
-  }
-});
 
 
 export default router;

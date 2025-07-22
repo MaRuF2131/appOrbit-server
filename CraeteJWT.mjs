@@ -2,29 +2,16 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import CreateUserRole from './utils/CreateUserRole.mjs';
-import { MongoClient, ObjectId, ServerApiVersion, Timestamp } from 'mongodb';
+import mongo from './MongoDB.mjs';
 dotenv.config();
 const router = express.Router();
 
-const uri = process.env.MONGODB_URI;
-
-const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  },
-});
 
 let db;
 (async () => {
   try {
-    /* await client.connect(); */
-    db = client.db('assignment-12');
-    // Ensure the collection is created
-    // Optional: Create index
-    // await db.collection('users').createIndex({ email: 1 }, { unique: true });
-    console.log("✅ MongoDB connected");
+
+    db = await mongo()
   } catch (err) {
     console.error('❌ MongoDB connection error:', err);
   }

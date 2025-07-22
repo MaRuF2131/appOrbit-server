@@ -47,7 +47,7 @@ export default function createAdminStatsRoute() {
         },
         {
           $project: {
-            date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+            date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt",timezone: "Asia/Dhaka" } },
             status: 1
           }
         },
@@ -72,7 +72,7 @@ export default function createAdminStatsRoute() {
         },
         {
           $project: {
-            date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }
+            date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt",timezone: "Asia/Dhaka" } }
           }
         },
         {
@@ -89,7 +89,7 @@ export default function createAdminStatsRoute() {
         },
         {
           $project: {
-            date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }
+            date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" ,timezone: "Asia/Dhaka"} }
           }
         },
         {
@@ -105,12 +105,16 @@ export default function createAdminStatsRoute() {
 
       for (let i = 0; i < 7; i++) {
         const date = new Date(last7Days);
-        date.setDate(date.getDate() + i);
-        const key = formatDate(date);
-        dailyMap[key] = { date: key, users: 0, products: 0, pending: 0, accepted: 0, reviews: 0,rejected:0 };
+           date.setDate(date.getDate() + i);
+           console.log("date",date);
+           
+           const key = formatDate(date);
+           dailyMap[key] = { date: key, users: 0, products: 0, pending: 0, accepted: 0, reviews: 0,rejected:0 };
       }
 
       productStats.forEach(stat => {
+        console.log('stat',stat._id);
+        
         if (dailyMap[stat._id]) {
           dailyMap[stat._id].products = stat.products;
           dailyMap[stat._id].pending = stat.pending;

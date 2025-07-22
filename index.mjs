@@ -10,9 +10,14 @@ import ModeratorRoute from './moderatorRoute/moderatorRoute.mjs'
 dotenv.config();
 const app = express();
 let db;
-( async()=>{
-    db=await mongo();
-})()
+(async () => {
+  try {
+
+    db = await mongo()
+  } catch (err) {
+    console.error('❌ MongoDB connection error:', err);
+  }
+})();
 
 app.use(cookieParser());
 app.use(cors({origin:['https://cherity.web.app' ,'http://localhost:5173'],credentials:true ,allowedHeaders: ['Content-Type', 'Authorization', 'x-user','authorization']}));
