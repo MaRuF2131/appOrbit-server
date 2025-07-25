@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 const verifyJWT = (req, res, next) => {
   const token = req.cookies.token;
-  const user = JSON.parse(req.headers['x-user']);
+  const user = JSON.parse(req.headers['authorization']);
 
   if (!token || !user) {
     console.log("⛔ Missing token or user information");

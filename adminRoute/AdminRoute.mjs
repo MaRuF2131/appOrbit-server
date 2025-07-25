@@ -1,4 +1,4 @@
-import verifyJWT from "../PrivateRoutePackage/VerifyJWT.mjs";
+import verifyJWT from "../utils/VerifyJWT.mjs";
 import express, { Router } from 'express';
 import dotenv from 'dotenv';
 import mongo from "../MongoDB.mjs";
@@ -88,7 +88,7 @@ router.post("/coupons", async (req, res) => {
   try {
     const coupon = {
       code: req.body.code,
-      expiryDate: req.body.expiryDate,
+      expiryDate: new Date(req.body.expiryDate),
       description: req.body.description,
       discount: parseFloat(req.body.discount),
       createdAt: new Date(),

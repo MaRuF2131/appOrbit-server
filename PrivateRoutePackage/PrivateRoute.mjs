@@ -1,11 +1,13 @@
-import verifyJWT from "./VerifyJWT.mjs";
+import verifyJWT from "../utils/VerifyJWT.mjs";
 import checkSubscriptionStatus from "../utils/Check-subscripton.mjs";
 import ProductSubmissionCheck from "../utils/ProductSubmisionCheck.mjs";
 import express from 'express';
+import Stripe from 'stripe';
 import dotenv from 'dotenv';
 dotenv.config();
 import {  ObjectId } from 'mongodb';
 import mongo from "../MongoDB.mjs";
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY); // 🔒 from .env
 const router = express.Router();
 
 
@@ -39,8 +41,9 @@ router.get('/subscriber', async (req, res) => {
   }
 });
 //send subscription status
-router.patch('/sendsubscribe',async (req, res) => {
+router.patch('/sendsubscribe/:id',async (req, res) => {
   try{
+    const {id}=req.params
     const user  = req.user;
     console.log("Decoded userffffffffff:", user);
 
@@ -49,7 +52,7 @@ router.patch('/sendsubscribe',async (req, res) => {
     }
     
     const result = await db.collection('subscribers').insertOne(
-      { email: user.email, name: user.username, status: 'pending' }
+      { email: user.email, name: user.username,paymnetid:id, status: 'active' }
     );
 
     if (!result) {
@@ -391,6 +394,99 @@ router.delete('/delete-product/:id', async (req, res) => {
   }
 });
 
+// get discount
+
+router.get('/useCoupon/:coupon', async (req, res) => {
+  const { coupon } = req.params;
+
+  try {
+    const foundCoupon = await db.collection('coupons').findOne({ code: coupon });
+
+    if (!foundCoupon) {
+      return res.status(404).json({ok:false, error: '❌ Coupon not found' });
+    }
+
+    if (new Date(foundCoupon.expiryDate) < new Date()) {
+      return res.status(400).json({ok:false, error: '❌ Coupon has expired' });
+    }
+
+    res.status(200).json({
+      ok:true,
+      message: '✅ Coupon is valid',
+      coupon: {
+        code: foundCoupon.code,
+        discount: foundCoupon.discount,      
+        expiryDate: foundCoupon.expiryDate,
+      },
+    });
+  } catch (err) {
+    console.error('Error verifying coupon:', err.message);
+    res.status(500).json({ error: '❌ Internal server error' });
+  }
+});
+
+//user statistics 
+router.get('/statistics', async (req, res) => {
+  try {
+    const email = req.user.email;
+    const productsCollection = db.collection('products');
+    const reviewsCollection = db.collection('reviews');
+
+    // Get products by this user
+    const acceptedProducts = await productsCollection.find({ owner_mail: email, status: 'accepted' }).project({ _id: 1 }).toArray();
+    const acceptedIds = acceptedProducts.map((p) => p._id.toString());
+
+    // Count stats
+    const [totalPending, totalAccepted, totalRejected, totalReviews] = await Promise.all([
+      productsCollection.countDocuments({ owner_mail: email, status: 'pending' }),
+      productsCollection.countDocuments({ owner_mail: email, status: 'accepted' }),
+      productsCollection.countDocuments({ owner_mail: email, status: 'rejected' }),
+      reviewsCollection.countDocuments({ productId: { $in: acceptedIds } }),
+    ]);
+
+    res.send({
+        pendingProducts: totalPending,
+        acceptedProducts: totalAccepted,
+        totalRejected: totalRejected,
+        totalProducts:totalPending+totalAccepted+totalRejected,
+        totalReviews,
+      });
+  } catch (error) {
+    console.error('Error fetching user stats:', error);
+    res.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+
+///payment
+
+router.post('/create-payment-intent', async (req, res) => {
+  try {
+    const {coupon } = req.body;
+    const email=req.user.email;
+
+    let amount; // $10 default
+    const coupondata = await db.collection('coupons').findOne({ code: coupon });
+    if(coupondata){
+       amount =(((100-(parseFloat(coupondata.discount)))/100)*10)*100;
+    }else amount=1000
+
+   if(amount){
+     console.log(amount); 
+     const paymentIntent = await stripe.paymentIntents.create({
+      amount,
+      currency: 'usd',
+      metadata: { email },
+    });
+   res.send({ clientSecret: paymentIntent.client_secret });
+  }else{
+    res.status(400).json({message:'Amount is not found'})
+  }
+  } catch (err) {
+    console.error('Payment intent error:', err);
+    res.status(500).json({ error: 'Failed to create payment intent' });
+  }
+});
 
 
 export default router;

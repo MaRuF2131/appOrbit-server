@@ -1,4 +1,4 @@
-import verifyJWT from "../PrivateRoutePackage/VerifyJWT.mjs";
+import verifyJWT from "../utils/VerifyJWT.mjs";
 import express, { Router } from 'express';
 import dotenv from 'dotenv';
 import mongo from "../MongoDB.mjs";
@@ -50,6 +50,53 @@ router.patch('/products/status/:id', updateProductStatus);
 
 // PATCH: Mark a product as featured
 router.patch('/products/feature/:id', markProductAsFeatured);
+
+//reported product
+router.get('/report/products', async (req, res) => {
+  try {
+    const reports = await db.collection('report').find().toArray();
+    const productIds = reports.map(r => new ObjectId(r.report_id));
+    const products = await db.collection('products')
+      .find({ _id: { $in: productIds } }).toArray();
+
+    const merged = reports.map(report => {
+      const product = products.find(p => p._id.toString() === report.report_id);
+      return { ...report, product };
+    });
+
+    res.json(merged);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+//delete report and reported product 
+
+router.delete('/delete-product-and-report/:productId/:reportId', async (req, res) => {
+  const { productId, reportId } = req.params;
+
+  try {
+    const productResult = await db.collection('products').deleteOne({ _id: new ObjectId(productId) });
+    const reportResult = await db.collection('report').deleteOne({ _id: new ObjectId(reportId) });
+
+    if (productResult.deletedCount === 0) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    if (reportResult.deletedCount === 0) {
+      return res.status(404).json({ message: 'Report not found' });
+    }
+
+    res.status(200).json({
+      message: 'Product and report deleted successfully',
+      deletedProductId: productId,
+      deletedReportId: reportId,
+    });
+  } catch (error) {
+    console.error('Error deleting product and report:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
 
 ///statistics
 

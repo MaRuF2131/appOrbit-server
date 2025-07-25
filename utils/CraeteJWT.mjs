@@ -1,8 +1,8 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
-import CreateUserRole from './utils/CreateUserRole.mjs';
-import mongo from './MongoDB.mjs';
+import CreateUserRole from './CreateUserRole.mjs';
+import mongo from '../MongoDB.mjs';
 dotenv.config();
 const router = express.Router();
 
