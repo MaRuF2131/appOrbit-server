@@ -20,7 +20,7 @@ let db;
 })();
 
 app.use(cookieParser());
-app.use(cors({origin:['https://cherity.web.app' ,'http://localhost:5173'],credentials:true ,allowedHeaders: ['Content-Type', 'Authorization', 'x-user','authorization']}));
+app.use(cors({origin:['https://apporbitmt.web.app' ,'http://localhost:5173'],credentials:true ,allowedHeaders: ['Content-Type', 'Authorization', 'x-user','authorization']}));
 app.use(express.json());
 
 
