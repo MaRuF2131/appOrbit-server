@@ -114,7 +114,12 @@ router.delete("/coupons/:id", async (req, res) => {
 // PATCH: Update a coupon
 router.patch("/coupons/:id", async (req, res) => {
   const id = req.params.id;
-  const updatedData = req.body;
+    const updatedData = {
+      code: req.body.code,
+      expiryDate: new Date(req.body.expiryDate),
+      description: req.body.description,
+      discount: parseFloat(req.body.discount),
+    };
 
   try {
     const result = await db.collection("coupons").updateOne(
