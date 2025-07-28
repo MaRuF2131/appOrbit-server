@@ -125,7 +125,7 @@ router.post('/add-product', async (req, res) => {
 
     const product = {
       ...body,
-      upvot:0,
+      upvot:[],
       status:'pending',
       isfeatured: false,
       createdAt: new Date()
